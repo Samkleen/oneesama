@@ -3,7 +3,7 @@ FROM node:22-bookworm-slim AS base
 ENV NODE_ENV=production
 ENV MAB_BROWSER_HEADLESS=false
 ENV MAB_DOCKER_CONTAINER=1
-ENV MAB_MEET_BROWSER_CONTROL_MODE=webdriver_chromedriver
+ENV MAB_MEET_BROWSER_CONTROL_MODE=playwright
 ENV MAB_MEET_UI_INTERACTION_MODE=auto
 ENV MAB_MEET_XTEST_INPUT_COMMAND=/usr/local/bin/cueboard-xtest-input
 ENV MEET_XTEST_INPUT_COMMAND=/usr/local/bin/cueboard-xtest-input
