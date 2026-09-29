@@ -64,7 +64,7 @@ let cachedInlineVRMDeps = "";
 
 function shouldInlineVRMDeps(config: AvatarInitScriptConfig) {
   const renderer = String(config.avatarRenderer || "live2d").toLowerCase();
-  return renderer === "vrm" || renderer === "3d";
+  return renderer === "vrm" || renderer === "3d" || renderer === "gltf" || renderer === "glb";
 }
 
 function buildInlineVRMDeps() {

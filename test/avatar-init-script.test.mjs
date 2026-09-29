@@ -115,6 +115,19 @@ test("avatar init script bundles VRM dependencies for Meet pages", () => {
   assert.match(script, /VRMLoaderPlugin/);
 });
 
+test("avatar init script bundles GLTF dependencies and custom morph support", () => {
+  const script = buildAvatarInitScript({
+    avatarRenderer: "gltf",
+    gltfModelUrl: "http://127.0.0.1:8787/hue/hue-custom.glb",
+  });
+
+  assert.match(script, /MAB_AVATAR_INLINE_VRM_DEPS/);
+  assert.match(script, /GLTFLoader/);
+  assert.match(script, /hue-custom\.glb/);
+  assert.match(script, /jawOpen/);
+  assert.match(script, /mouthSmileLeft/);
+});
+
 test("avatar init script skips VRM dependency bundle for explicit Live2D renderer", () => {
   const script = buildAvatarInitScript({
     avatarRenderer: "live2d",

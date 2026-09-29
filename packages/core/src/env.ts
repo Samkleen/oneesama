@@ -184,6 +184,8 @@ export function getRuntimeConfig(env = process.env) {
       env.MAB_AVATAR_VRM_MODEL_URL ||
       "https://raw.githubusercontent.com/trinhtanphat/AMI-Chat-AI/main/public/models/3d/Sendagaya_Shibu.vrm",
     avatarVRMModelFallbackUrls: splitList(env.MAB_AVATAR_VRM_MODEL_FALLBACK_URLS || ""),
+    avatarGLTFModelUrl: env.MAB_AVATAR_GLTF_MODEL_URL || "",
+    avatarGLTFModelFallbackUrls: splitList(env.MAB_AVATAR_GLTF_MODEL_FALLBACK_URLS || ""),
     avatarDepsDir: env.MAB_AVATAR_DEPS_DIR || "",
     avatarAssetRoot: env.MAB_AVATAR_ASSET_ROOT || DEFAULT_AVATAR_ASSET_ROOT,
     avatarVideoIdlePath: env.MAB_AVATAR_VIDEO_IDLE_PATH || DEFAULT_VIDEO_IDLE_PATH,

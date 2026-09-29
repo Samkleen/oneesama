@@ -27,6 +27,7 @@ import {
   nowIso,
   saveDiagnostics,
   shouldMuteMeetLocalPlayback,
+  startLocalStaticAssetServer,
   takeScreenshot,
   type GoogleMeetJoinInput,
   type GoogleMeetJoinerOptions,
@@ -369,8 +370,16 @@ export function createGoogleMeetJoiner(options: GoogleMeetJoinerOptions = {}) {
       meetBrowserControlMode,
       retryPolicy,
     });
+    let avatarAssetServer: LocalStaticAssetServer | null = null;
+    let avatarInput = input;
+    const configuredGLTF = String(input.avatarGLTFModelUrl || config.avatarGLTFModelUrl || "").trim();
+    if (installAvatar && ["gltf", "glb", "3d"].includes(String(input.avatarRenderer || config.avatarRenderer || "").toLowerCase()) && configuredGLTF && !/^(https?:|data:|blob:)/i.test(configuredGLTF)) {
+      avatarAssetServer = await startLocalStaticAssetServer({ root: config.avatarAssetRoot });
+      avatarInput = { ...input, avatarGLTFModelUrl: avatarAssetServer.urlFor(configuredGLTF) };
+      diagnostics.record("avatar_gltf_asset_server", { model: configuredGLTF, url: avatarInput.avatarGLTFModelUrl });
+    }
     const avatarConfig = await buildMeetAvatarConfig({
-      input,
+      input: avatarInput,
       config,
       botName,
       installAvatar,
@@ -641,7 +650,7 @@ export function createGoogleMeetJoiner(options: GoogleMeetJoinerOptions = {}) {
       realtimeAudioCapture,
       realtimeRecappiAudioInput,
       webDriverSession,
-      avatarAssetServer: null as LocalStaticAssetServer | null,
+      avatarAssetServer,
       captionCapture: null,
     };
     const browserRecord = await activeBrowserRecord.remember(browser, sessionId, meetUrl);

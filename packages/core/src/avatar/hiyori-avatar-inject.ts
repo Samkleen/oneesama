@@ -30,6 +30,8 @@ import {
     modelFallbackUrls: DEFAULT_HIYORI_MODEL_FALLBACK_URLS,
     vrmModelUrl: DEFAULT_VRM_MODEL_URL,
     vrmModelFallbackUrls: [],
+    gltfModelUrl: "",
+    gltfModelFallbackUrls: [],
     threeModuleUrl: DEFAULT_THREE_MODULE_URL,
     gltfLoaderModuleUrl: DEFAULT_GLTF_LOADER_MODULE_URL,
     threeVrmModuleUrl: DEFAULT_THREE_VRM_MODULE_URL,
@@ -505,8 +507,8 @@ import {
 
   function normalizeRenderer(value) {
     const renderer = String(value || "live2d").toLowerCase();
-    if (renderer === "3d") return "vrm";
-    return ["live2d", "vrm", "video", "fallback"].includes(renderer) ? renderer : "live2d";
+    if (renderer === "3d" || renderer === "glb") return "gltf";
+    return ["live2d", "vrm", "gltf", "video", "fallback"].includes(renderer) ? renderer : "live2d";
   }
 
   async function loadThreeVRMDeps() {
@@ -813,6 +815,78 @@ import {
     requestAnimationFrame(tick);
   }
 
+  function setGLTFMorph(root, names, value) {
+    const wanted = names.map((name) => String(name).toLowerCase());
+    root.traverse((node) => {
+      if (!node?.morphTargetDictionary || !node?.morphTargetInfluences) return;
+      for (const [name, index] of Object.entries(node.morphTargetDictionary)) {
+        if (wanted.includes(String(name).toLowerCase())) node.morphTargetInfluences[Number(index)] = clamp01(value);
+      }
+    });
+  }
+
+  async function loadGLTFModelWithFallback(loader) {
+    const urls = normalizeModelUrls(config.gltfModelUrl, config.gltfModelFallbackUrls);
+    let lastError = null;
+    for (const modelUrl of urls) {
+      try {
+        const gltf = await loader.loadAsync(modelUrl);
+        if (!gltf?.scene) throw new Error("loaded GLTF did not contain a scene");
+        return { model: gltf.scene, modelUrl };
+      } catch (error) {
+        lastError = error;
+        log("GLTF model load failed; trying fallback", modelUrl, error?.message);
+      }
+    }
+    throw lastError || new Error("no GLTF model URLs configured");
+  }
+
+  async function createGLTFAvatarRenderer(canvas) {
+    const deps = await loadThreeVRMDeps();
+    const { THREE, GLTFLoader } = deps;
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, preserveDrawingBuffer: true });
+    renderer.setSize(config.canvasWidth, config.canvasHeight, false);
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(config.background);
+    const camera = new THREE.PerspectiveCamera(24, config.canvasWidth / config.canvasHeight, 0.01, 100);
+    camera.position.set(0, 1.35, 3.2);
+    camera.lookAt(0, 1.35, 0);
+    const key = new THREE.DirectionalLight(0xffffff, 3.2); key.position.set(1.8, 2.8, 3.5); scene.add(key);
+    const fill = new THREE.DirectionalLight(0xb9d7ff, 1.4); fill.position.set(-2.4, 1.7, 2); scene.add(fill);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.4));
+    const { model, modelUrl } = await loadGLTFModelWithFallback(new GLTFLoader());
+    scene.add(model);
+    const box = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3(); const center = new THREE.Vector3(); box.getSize(size); box.getCenter(center);
+    const scale = 2.35 / Math.max(0.1, size.y); model.scale.setScalar(scale);
+    model.position.set(-center.x * scale, 0.25 - box.min.y * scale, -center.z * scale);
+    Object.assign(rendererState, { renderer: "gltf", gltfLoaded: true, fallbackReason: "", gltfModelUrl: modelUrl, layout: config.layout });
+    const startedAt = performance.now();
+    function tick() {
+      const t = (performance.now() - startedAt) / 1000;
+      const state = avatarController.state;
+      const actionP = avatarController.getActionEnvelope();
+      const audioMouth = window.MAB_AVATAR_AUDIO_BUS?.getMouthLevel?.() || 0;
+      const mouth = clamp01(Math.max(audioMouth, state.action === "speak" ? actionP * 0.9 : 0));
+      const flutter = 0.78 + 0.22 * (0.5 + 0.5 * Math.sin(t * 24));
+      setGLTFMorph(model, ["jawOpen"], mouth * flutter);
+      setGLTFMorph(model, ["mouthFunnel"], mouth * (0.12 + 0.18 * Math.max(0, Math.sin(t * 9))));
+      setGLTFMorph(model, ["mouthPucker"], mouth * 0.08);
+      const smile = state.mood === "happy" || state.mood === "shy" ? 0.65 : 0.08;
+      setGLTFMorph(model, ["mouthSmileLeft", "mouthSmileRight"], smile);
+      const blinkPhase = t % 4.8; const blink = blinkPhase > 4.58 ? Math.sin(((blinkPhase - 4.58) / 0.22) * Math.PI) : 0;
+      setGLTFMorph(model, ["eyeBlinkLeft", "eyeBlinkRight"], blink);
+      model.rotation.y = Math.sin(t * 0.38) * 0.025;
+      model.rotation.x = Math.sin(t * 0.52 + 0.8) * 0.012 - (state.action === "nod" ? actionP * 0.08 : 0);
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+    log("GLTF avatar loaded", modelUrl);
+  }
+
   function createHiddenAvatarCanvas() {
     const canvas = document.createElement("canvas");
     canvas.width = config.canvasWidth;
@@ -829,6 +903,7 @@ import {
     const requestedRenderer = normalizeRenderer(config.avatarRenderer);
     let live2dLoaded = false;
     let vrmLoaded = false;
+    let gltfLoaded = false;
     let videoRendererStarted = false;
     let fallbackReason =
       requestedRenderer === "fallback"
@@ -861,7 +936,17 @@ import {
       }
     }
 
-    if (!vrmLoaded && requestedRenderer === "live2d" && !config.disableLive2D) {
+    if (requestedRenderer === "gltf") {
+      try {
+        await createGLTFAvatarRenderer(canvas);
+        gltfLoaded = true;
+      } catch (error) {
+        fallbackReason = String(error?.message || error);
+        log("GLTF load failed; using fallback canvas", error?.message);
+      }
+    }
+
+    if (!vrmLoaded && !gltfLoaded && requestedRenderer === "live2d" && !config.disableLive2D) {
       try {
         await loadLive2DDeps();
         const app = new window.PIXI!.Application({
@@ -926,7 +1011,7 @@ import {
       }
     }
 
-    if (!live2dLoaded && !vrmLoaded && !videoRendererStarted) {
+    if (!live2dLoaded && !vrmLoaded && !gltfLoaded && !videoRendererStarted) {
       if (requestedRenderer === "video") {
         videoHold.startSuppressedVideoHoldRenderer(canvas.getContext("2d"), config, rendererState, {
           videoHoldReason: fallbackReason || "video_renderer_not_loaded",
@@ -937,6 +1022,7 @@ import {
         renderer: "fallback",
         live2dLoaded: false,
         vrmLoaded: false,
+        gltfLoaded: false,
         videoLoaded: false,
         fallbackReason: fallbackReason || "live2d_not_loaded",
       });
@@ -1138,6 +1224,7 @@ import {
       rendererMode: window.MAB_AVATAR_RENDERER.renderer,
       live2dLoaded: window.MAB_AVATAR_RENDERER.live2dLoaded,
       vrmLoaded: window.MAB_AVATAR_RENDERER.vrmLoaded,
+      gltfLoaded: window.MAB_AVATAR_RENDERER.gltfLoaded,
       videoLoaded: window.MAB_AVATAR_RENDERER.videoLoaded,
       fallbackReason: window.MAB_AVATAR_RENDERER.fallbackReason,
       modelUrl: config.modelUrl,
@@ -1169,10 +1256,12 @@ import {
           rendererMode: window.MAB_AVATAR_RENDERER.renderer,
           live2dLoaded: window.MAB_AVATAR_RENDERER.live2dLoaded,
           vrmLoaded: window.MAB_AVATAR_RENDERER.vrmLoaded,
+          gltfLoaded: window.MAB_AVATAR_RENDERER.gltfLoaded,
           videoLoaded: window.MAB_AVATAR_RENDERER.videoLoaded,
           fallbackReason: window.MAB_AVATAR_RENDERER.fallbackReason,
           modelUrl: config.modelUrl,
           vrmModelUrl: config.vrmModelUrl,
+          gltfModelUrl: config.gltfModelUrl,
           rendererDeferred: false,
           rendererStartedAt: new Date().toISOString(),
         });
