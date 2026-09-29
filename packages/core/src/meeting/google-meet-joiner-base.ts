@@ -295,6 +295,7 @@ export interface GoogleMeetJoinInput extends ScreenShareBridgeInput {
   avatarModelUrl?: string;
   avatarRenderer?: string;
   avatarVRMModelUrl?: string;
+  avatarGLTFModelUrl?: string;
   avatarDepsDir?: string;
   avatarLayout?: string;
   disableLive2D?: boolean;

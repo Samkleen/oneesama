@@ -492,6 +492,8 @@ export async function buildMeetAvatarConfig({
     avatarRenderer: requestedAvatarRenderer,
     vrmModelUrl: input.avatarVRMModelUrl || config.avatarVRMModelUrl,
     vrmModelFallbackUrls: config.avatarVRMModelFallbackUrls,
+    gltfModelUrl: input.avatarGLTFModelUrl || config.avatarGLTFModelUrl,
+    gltfModelFallbackUrls: config.avatarGLTFModelFallbackUrls,
     live2dDepsDir: input.avatarDepsDir || config.avatarDepsDir,
     layout: input.avatarLayout || config.avatarLayout,
     botName,

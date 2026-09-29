@@ -286,6 +286,8 @@ export interface HiyoriAvatarConfig {
   };
   vrmModelUrl?: string;
   vrmModelFallbackUrls?: string[];
+  gltfModelUrl?: string;
+  gltfModelFallbackUrls?: string[];
   threeModuleUrl?: string;
   gltfLoaderModuleUrl?: string;
   threeVrmModuleUrl?: string;
